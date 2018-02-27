@@ -58,13 +58,60 @@ typedef struct url_t
     char    fragment[1024];
 } url_t;
 
+typedef struct rdnSequence_t
+{
+    char    oid[64];
+    char    dn[64];
+} rdnSequence_t;
+
+typedef struct validity_t
+{
+    char    notBefore[64];
+    char    notAfter[64];
+} validity_t;
+
+typedef struct subjectPublicKeyInfo_t
+{
+    char    algorithm[64];
+    
+    uint32  module_N;
+    opaque  module[1024];
+    
+    uint32  publicExponent;
+} subjectPublicKeyInfo_t;
+
+// http://blog.csdn.net/kesay/article/details/46874699
+typedef struct x509v3_t
+{
+    uint8           version;
+    uint32          serialNumber_N;
+    uint8           serialNumber[128];
+    char            signature[128];
+    
+    uint8           issuer_N;
+    rdnSequence_t   issuer[128];
+    
+    validity_t      validity;
+    
+    uint8           subject_N;
+    rdnSequence_t   subject[128];
+    
+    subjectPublicKeyInfo_t  subjectPublicKeyInfo;
+    
+    uint32          signatureValue_N;
+    uint8           signatureValue[4096];
+} x509v3_t;
+
 typedef struct tls_t
 {
-    opaque  random1[28];
-    opaque  random2[28];
-    opaque  random3[28];
-    opaque  session_id_length;
-    opaque  session_id[32];
+    opaque      random1[28];
+    opaque      random2[28];
+    opaque      pubkey[65];
+    opaque      session_id_length;
+    opaque      session_id[32];
+
+    uint32      x509_N;
+    x509v3_t    x509[10];
 } tls_t;
 
 url_t urlobj;
@@ -887,39 +934,6 @@ typedef struct tls_handshake_t {
     } body;
 } tls_handshake_t;
 
-typedef struct rdnSequence_t
-{
-    
-} rdnSequence_t;
-
-typedef struct validity_t
-{
-    uint32  notBefore;
-    uint32  notAfter;
-} validity_t;
-
-typedef struct subjectPublicKeyInfo_t
-{
-    uint8   alg;
-} subjectPublicKeyInfo_t;
-
-typedef struct x509v3_t
-{
-    uint8           version;
-    uint8           serialNumber[128];
-    uint8           signature[128];
-    
-    uint8           issuer_n;
-    rdnSequence_t   issuer[128];
-    
-    validity_t      validity;
-    
-    uint8           subject_n;
-    rdnSequence_t   subject[128];
-    
-    
-} x509v3_t;
-
 static int send_tls_client_hello(int * sock)
 {
     uint8 buf[4096] = {0};
@@ -1065,34 +1079,327 @@ static int recv_tls_server_hello(int * sock)
     return 0;
 }
 
-static int tls_x509v3_parse(const opaque * buf, int size, x509v3_t * x509)
+/*
+ Certificate ::= SEQUENCE {
+     tbsCertificate       TBSCertificate, -- 证书主体
+     signatureAlgorithm   AlgorithmIdentifier, -- 证书签名算法标识
+     signatureValue       BIT STRING --证书签名值,是使用signatureAlgorithm部分指定的签名算法对tbsCertificate证书主题部分签名后的值.
+ }
+ TBSCertificate ::= SEQUENCE {
+     version         [0] EXPLICIT Version DEFAULT v1, -- 证书版本号
+     serialNumber         CertificateSerialNumber, -- 证书序列号，对同一CA所颁发的证书，序列号唯一标识证书
+     signature            AlgorithmIdentifier, --证书签名算法标识
+     issuer               Name,                --证书发行者名称
+     validity             Validity,            --证书有效期
+     subject              Name,                --证书主体名称
+     subjectPublicKeyInfo SubjectPublicKeyInfo,--证书公钥
+     issuerUniqueID [1] IMPLICIT UniqueIdentifier OPTIONAL,
+     -- 证书发行者ID(可选)，只在证书版本2、3中才有
+     subjectUniqueID [2] IMPLICIT UniqueIdentifier OPTIONAL,
+     -- 证书主体ID(可选)，只在证书版本2、3中才有
+     extensions      [3] EXPLICIT Extensions OPTIONAL
+     -- 证书扩展段（可选），只在证书版本3中才有
+}
+     Version ::= INTEGER { v1(0), v2(1), v3(2) }
+     CertificateSerialNumber ::= INTEGER
+ 
+     AlgorithmIdentifier ::= SEQUENCE {
+     algorithm               OBJECT IDENTIFIER,
+     parameters              ANY DEFINED BY algorithm OPTIONAL }
+     parameters:
+     Dss-Parms ::= SEQUENCE { -- parameters ，DSA(DSS)算法时的parameters,
+ 
+     RSA算法没有此参数
+     p             INTEGER,
+     q             INTEGER,
+     g             INTEGER }
+ 
+     signatureValue：
+     Dss-Sig-Value ::= SEQUENCE { -- sha1DSA签名算法时,签名值
+     r       INTEGER,
+     s       INTEGER }
+ 
+     Name ::= CHOICE {
+     RDNSequence }
+     RDNSequence ::= SEQUENCE OF RelativeDistinguishedName
+     RelativeDistinguishedName ::=
+     SET OF AttributeTypeAndValue
+     AttributeTypeAndValue ::= SEQUENCE {
+     type     AttributeType,
+     value    AttributeValue }
+     AttributeType ::= OBJECT IDENTIFIER
+     AttributeValue ::= ANY DEFINED BY AttributeType
+ 
+     Validity ::= SEQUENCE {
+     notBefore      Time,  -- 证书有效期起始时间
+     notAfter       Time  -- 证书有效期终止时间
+     }
+     Time ::= CHOICE {
+         utcTime        UTCTime,
+         generalTime    GeneralizedTime }
+         UniqueIdentifier ::= BIT STRING
+         SubjectPublicKeyInfo ::= SEQUENCE {
+         algorithm            AlgorithmIdentifier, -- 公钥算法
+         subjectPublicKey     BIT STRING            -- 公钥值
+     }
+     subjectPublicKey:
+     RSAPublicKey ::= SEQUENCE { -- RSA算法时的公钥值
+     modulus            INTEGER, -- n
+     publicExponent     INTEGER -- e -- }
+ 
+     Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension
+     Extension ::= SEQUENCE {
+         extnID      OBJECT IDENTIFIER,
+         critical    BOOLEAN DEFAULT FALSE,
+         extnValue   OCTET STRING
+    }
+ */
+
+static int tls_x509v3_get_type_count(const opaque * buf, uint8 * tag,
+                                     uint8 * isobj, uint8 * type, uint32 * len)
 {
-    uint8 tag;      //universal(00), application(01), context-specific(10), private(11)
-    uint8 objtype;  //struct(1)  simple data type(0)
-    uint8 datatype;
-    uint32 datalen, bytecnt, i, j;
-    printf("parse x509\n");
+    uint8 bytes = 0;
+    uint32 len_ = 0, i;
+    int consume = 0;
     
-data:
-    tag         = (buf[0] >> 6) & 0x03;
-    objtype     = (buf[0] >> 5) & 0x01;
-    datatype    = (buf[0]) & 0x1f;
-    datalen     = buf[1] & 0x7f;
-    bytecnt     = 0;
+redo:
+    if (buf[0] == 0) {
+        consume ++;
+        buf ++;
+        goto redo;
+    }
     
-    printf("tag:%u, objtype:%u, datatype:%u, datalen:%u\n", tag, objtype, datatype, datalen);
+    * tag   = (buf[0] >> 6) & 0x03; //universal(00), application(01), context-specific(10), private(11)
+    * isobj = (buf[0] >> 5) & 0x01; //struct(1)  simple data type(0)
+    * type  = (buf[0]) & 0x1f;
+    bytes = buf[1] & 0x7f;
+    len_ = 0;
+    //printf("bytes:%u\n", bytes);
     
     if (buf[1] & 0x80) {
-        buf += 2;
-        for (i = 0; i < datalen; i++) {
-            bytecnt = (bytecnt << 8) | buf[i];
+        for (i = 0; i < bytes; i++) {
+            len_ = (len_ << 8) | buf[i + 2];
         }
-        buf += datalen;
     } else {
-        buf += 2;
-        bytecnt = datalen;
+        len_ = bytes;
+        bytes = 0;
     }
-    printf("bytecnt:%u\n", bytecnt);
+    * len = len_;
+    consume += bytes + 2;
+    buf += consume;
+    
+    if (*type == 5) {
+        printf("ASN.1 NULL TYPE\n");
+        goto redo;
+    }
+    
+    return consume;
+}
+
+static void tls_x509v3_get_oid(const opaque * buf, int len, char * oid)
+{
+    uint8 a = buf[0] / 40;
+    uint8 b = buf[0] % 40;
+    uint32 array[10] = {0};
+    char printbuf[100] = {0};
+    int i = 0, j = 0, off = 0;
+    
+    for (int i = 1; i < len; i++) {
+        array[j] *= 128;
+        array[j] += (buf[i] & 0x7F);
+
+        if ((buf[i] & 0x80) == 0) {
+            j ++;
+        }
+    }
+    
+    off += sprintf(oid + off, "%u.%u", a, b);
+    for (int i = 0; i < j; i++) {
+        off += sprintf(oid + off, ".%u", array[i]);
+    }
+}
+
+static int tls_x509v3_get_rdn(const opaque * buf, rdnSequence_t * rdn, uint8 * count)
+{
+    int consume = 0;
+    uint8 tag, isobj, type;
+    uint32 len;
+    int count_ = 0;
+
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);   //sequence
+    while (1) {
+        int once = tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);
+        if (type != 17) {   //not set
+            break;
+        }
+        consume += once;
+        consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);   //sequence
+        
+        consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);   //oid
+        tls_x509v3_get_oid(buf + consume, len, rdn[count_].oid);
+        consume += len;
+        
+        consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);
+        memcpy(rdn[count_].dn, buf + consume, len);
+        consume += len;
+        printf("rdnSequence[%d], oid:<%s>, dn:<%s>\n", count_,
+               rdn[count_].oid, rdn[count_].dn);
+        count_ ++;
+    }
+    
+    *count = count_;
+    return consume;
+}
+
+static int tls_x509v3_get_validity(const opaque * buf, validity_t * validity)
+{
+    int consume = 0;
+    uint8 tag, isobj, type;
+    uint32 len;
+    int off = 0;
+    
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);
+    
+    //notBefore
+    off = 0;
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);
+    off += sprintf(validity->notBefore + off, "%c%c-", buf[consume + 0], buf[consume + 1]);
+    off += sprintf(validity->notBefore + off, "%c%c-", buf[consume + 2], buf[consume + 3]);
+    off += sprintf(validity->notBefore + off, "%c%c ", buf[consume + 4], buf[consume + 5]);
+    off += sprintf(validity->notBefore + off, "%c%c:", buf[consume + 6], buf[consume + 7]);
+    off += sprintf(validity->notBefore + off, "%c%c:", buf[consume + 8], buf[consume + 9]);
+    off += sprintf(validity->notBefore + off, "%c%c", buf[consume + 10], buf[consume + 11]);
+    consume += len;
+    
+    //notAfter
+    off = 0;
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);
+    off += sprintf(validity->notAfter + off, "%c%c-", buf[consume + 0], buf[consume + 1]);
+    off += sprintf(validity->notAfter + off, "%c%c-", buf[consume + 2], buf[consume + 3]);
+    off += sprintf(validity->notAfter + off, "%c%c ", buf[consume + 4], buf[consume + 5]);
+    off += sprintf(validity->notAfter + off, "%c%c:", buf[consume + 6], buf[consume + 7]);
+    off += sprintf(validity->notAfter + off, "%c%c:", buf[consume + 8], buf[consume + 9]);
+    off += sprintf(validity->notAfter + off, "%c%c", buf[consume + 10], buf[consume + 11]);
+    consume += len;
+    
+    return consume;
+}
+
+static int tls_x509v3_get_public_keyinfo(const opaque * buf, subjectPublicKeyInfo_t * key)
+{
+    int consume = 0;
+    uint8 tag, isobj, type;
+    uint32 len;
+    int off = 0, i;
+    
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len); //sequence
+    
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len); //sequence
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len); //oid
+    tls_x509v3_get_oid(buf + consume, len, key->algorithm);
+    consume += len;
+    printf("subjectPublicKeyInfo_t:<%s>\n", key->algorithm);
+    
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len); //sequence
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len); //sequence
+    //p
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);
+    consume ++; len --; //skip padding.
+    memcpy(key->module, buf + consume, len);
+    key->module_N = len;
+    consume += len;
+    
+    consume += tls_x509v3_get_type_count(buf + consume, &tag, &isobj, &type, &len);
+    for (i = 0; i < len; i++) {
+        key->publicExponent <<= 8;
+        key->publicExponent |= buf[i + consume];
+    }
+    consume += len;
+
+    printf("subjectPublicKeyInfo_t, Module:%u, publicExponent:%u\n",
+           key->module_N, key->publicExponent);
+    
+    return consume;
+}
+
+static int tls_x509v3_parse(const opaque * buf, int size, x509v3_t * x509)
+{
+    uint8 tag, isobj, type;
+    uint32 len;
+    const opaque * begin = buf;
+    
+    printf(">>>>>>>>>>>>>>>>>>>> parse x509\n");
+    
+    //Certificate:: SEQUENCE,
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    printf("Certificate, tag:%u, isobj:%u, type:%u, len:%u\n", tag, isobj, type, len);
+    
+    //tbsCertificate:: SEQUENCE
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    printf("tbsCertificate, tag:%u, isobj:%u, type:%u, len:%u\n", tag, isobj, type, len);
+    
+    //tbsCertificate::version INTEGER
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    printf("tbsCertificate, tag:%u, isobj:%u, type:%u, len:%u\n", tag, isobj, type, len);
+    
+    //tbsCertificate::version
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    printf("version, tag:%u, isobj:%u, type:%u, len:%u\n", tag, isobj, type, len);
+    x509->version = *buf ++;
+    printf("version:%u\n", x509->version);
+    
+    //tbsCertificate::serialNumber
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    printf("serialNumber, tag:%u, isobj:%u, type:%u, len:%u\n", tag, isobj, type, len);
+    memcpy(x509->serialNumber, buf, len);
+    x509->serialNumber_N = len;
+    buf += len;
+    
+    //tbsCertificate::signature
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    printf("signature, tag:%u, isobj:%u, type:%u, len:%u\n", tag, isobj, type, len);
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    tls_x509v3_get_oid(buf, len, x509->signature);
+    buf += len;
+    printf("signature:{%s}\n", x509->signature);
+    
+    //tbsCertificate::issuer
+    buf += tls_x509v3_get_rdn(buf, x509->issuer, &x509->issuer_N);
+    
+    //tbsCertificate::validity
+    buf += tls_x509v3_get_validity(buf, &x509->validity);
+    printf("tbsCertificate::validity, %s -> %s\n",
+           x509->validity.notBefore, x509->validity.notAfter);
+    
+    //tbsCertificate::subject
+    buf += tls_x509v3_get_rdn(buf, x509->subject, &x509->subject_N);
+    
+    //tbsCertificate::subjectPublicKeyInfo
+    buf += tls_x509v3_get_public_keyinfo(buf, &x509->subjectPublicKeyInfo);
+    
+    //skip extension
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    buf += len;
+    
+    //signatureAlgorithm
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    printf("signatureAlgorithm, tag:%u, isobj:%u, type:%u, len:%u\n", tag, isobj, type, len);
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    tls_x509v3_get_oid(buf, len, x509->signature);
+    buf += len;
+    printf("signatureAlgorithm:{%s}\n", x509->signature);
+    
+    //signatureValue
+    buf += tls_x509v3_get_type_count(buf, &tag, &isobj, &type, &len);
+    buf ++; len --; //skip padding
+    printf("len:%u\n", len);
+    memcpy(x509->signatureValue, buf, len);
+    x509->signatureValue_N = len;
+    buf += len;
+    printf("signatureValue:%u\n", len);
+    
+    printf("<<<<<<<<<<<<<<<<<< parse x509 end, consume:%zd, remaining:%zd\n\n\n",
+           buf - begin, size - (buf - begin));
     
     return 0;
 }
@@ -1144,8 +1451,8 @@ static int recv_tls_certificate(int * sock)
         i += 3;
         
         printf("certificate:%d, size:%u\n", ++ certificate_count, one_ceritificate);
-        x509v3_t x509v3;
-        if (tls_x509v3_parse(&buf[i], one_ceritificate, &x509v3) < 0) {
+        if (tls_x509v3_parse(&buf[i], one_ceritificate,
+                             &tlsobj.x509[ ++tlsobj.x509_N]) < 0) {
             printf("certificate, parse x509v3 error\n");
             return -1;
         }
