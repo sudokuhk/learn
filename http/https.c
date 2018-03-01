@@ -1448,7 +1448,16 @@ static int recv_tls_certificate(int * sock)
     
     while (ncertificate > 0) {
         uint32 one_ceritificate = (buf[i] << 16) | (buf[i + 1] << 8) | buf[i + 2];
-        i += 3;
+         i += 3;
+        
+#if 0
+        char file[100] = {0};
+        int fd = -1;
+        sprintf(file, "certificate_%d.bin", certificate_count);
+        fd = open(file, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        write(fd, &buf[i], one_ceritificate);
+        close(fd);
+#endif
         
         printf("certificate:%d, size:%u\n", ++ certificate_count, one_ceritificate);
         if (tls_x509v3_parse(&buf[i], one_ceritificate,
