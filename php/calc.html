@@ -1,0 +1,196 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head profile="http://gmpg.org/xfn/11">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>经纬度距离计算小工具</title>
+<style>
+body {margin:5px 0;padding:0;
+	font-size:12px;TEXT-ALIGN: center;
+	font-family: arial, helvetica, sans-serif;TEXT-ALIGN: center;background:#FFF;	
+}
+ HTML BODY {	TEXT-ALIGN: center;}
+div{MARGIN: 0px auto; font-family: arial, helvetica, sans-serif;text-align:left;
+}
+#page ,div.page{width:980px;overflow:visible;text-align:center;}
+#main{float:left;width:73%;text-align:left;overflow:hidden;}
+#sidebar{float:right;width:26%;}
+#main p{ line-height: 25px ;font-size:14px;
+}
+a img{border:0;}
+p a img{
+border:1px solid #eee;padding:2px;margin:3px;
+}
+
+i.corner{display: block;}  
+  i.corner i{height:1px; display:block; font-size:1px; overflow:hidden; background-color:#FFFFFF;}  
+  i.corner i.l1{
+  margin: 0 5px;
+  border-bottom:1px solid #ced4ca;
+  }  
+  i.corner i.l2,i.corner i.l3,i.corner i.l4,div.cbody{
+	margin: 0 3px;
+	border-left:1px solid #ced4ca;
+	border-right:1px solid #ced4ca;background:#fff;
+  }  
+  i.corner i.l3{margin: 0 2px;}  
+  i.corner i.l4{margin: 0 1px;height: 1px;}  
+  i.corner i.l5{margin: 0 5px;border-top:1px solid #ced4ca;height:1px;} 
+  div.cbody{
+  padding: 0 8px;
+  margin:0;background:#fff;text-align:left;
+  }  
+  .panel{width:100%;font-size:12px;margin:5px 0 ;} 
+  div.cbody .detailentry,div.cbody h1{margin:0;padding:0;}
+  .cbody ul{
+  list-style:none;
+  }
+  #CodeLable, #revq, td{
+  font-weight:bold;font-size:18px;
+  }
+  td{
+  font-weight:normal;
+  }
+  td.lb{
+  text-align:right;padding:0 5px 0 0;color:green;width:150px;
+  }
+  .warning{background:red;color:#fff;padding:2px;float:left;}
+/* end of corner*/</style>
+ <body> <div id="page">
+ <div class="page">
+   <h2>度分秒 TO 小数点 转换</h2>
+<div class="panel">  
+	<i class="corner"><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i></i>  
+	<div class="cbody">
+	 <div style="text-align:center;height:60px;"> 
+		<div style="float:left;color:green;font-weight:bold;font-size:14px;width:50px;" id="sign1">&nbsp;</div>
+		<div style="float:left;">
+		
+			<input type="text" id="deg" name="deg"  onKeyUp="Convert2Dec()" />度
+			<input type="text" id="min" name="min"  onKeyUp="Convert2Dec()"/>分
+			<input type="text" id="sec" name="sec"  onKeyUp="Convert2Dec()"/>秒<br /><br />
+			=
+			<input type="text" id="deg2" name="deg2" onkeyup="Convert2Deg()" />度
+		</div>
+		<div style="float:left;color:green;font-weight:bold;font-size:14px;width:50px;" id="sign2">&nbsp;</div>	
+	   </div>
+	</div>  
+	<i class="corner"><i class="l4"></i><i class="l3"></i><i class="l2"></i><i class="l5"></i></i>  
+  </div>
+  <h2>经纬度距离计算</h2>
+  <div class="panel">  
+	<i class="corner"><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i></i>  
+	<div class="cbody">
+	 <div style="text-align:center;height:100px;"> 
+		 <div style="text-align:left;float:left;margin-left:40px;">
+		 A：纬度<input type="text" name="lat1" id="lat1" onKeyUp="calDis()" /> 经度<input type="text" name="lng1" id="lng1"  onKeyUp="calDis()" /><br /><br />
+		 B：纬度<input type="text" name="lat2" id="lat2"  onKeyUp="calDis()" />经度<input type="text" name="lng2" id="lng2"  onKeyUp="calDis()" /><br /><br />
+		 A-B：距离=<input type="text" name="distance" id="distance" /> Km 
+		   </div>
+		   <div class="warning" id="warning"></div>
+		 </div>
+
+	</div>  
+	<i class="corner"><i class="l4"></i><i class="l3"></i><i class="l2"></i><i class="l5"></i></i>  
+  </div>
+ 
+ <SCRIPT LANGUAGE="JavaScript">
+ <!--
+
+	function getVal(obj){
+		if( document.getElementById( obj ) != null ) 
+			return  document.getElementById( obj ).value;
+		else return 0;
+	}
+	function setVal(obj,val){
+		if( document.getElementById( obj ) != null ) 
+		 document.getElementById( obj ).value = val;
+		
+	}
+	function Convert2Dec(){
+		var deg = Math.abs( getVal('deg') );
+		var min = Math.abs( getVal('min') );
+		var sec = Math.abs( getVal('sec') );
+		var deci =deg * 1 +  ( sec  * 1 + min * 60 )/3600 ;
+		setVal("deg2",deci); 
+	}
+	function Convert2Deg(){
+		var deci =  Math.abs( getVal('deg2') );
+		var deci2 = deci + '';
+
+		if( deci2.indexOf('.') == -1 ){
+			setVal("deg",deci);
+			return false;
+		}
+		deci = deci2.split(".");
+		setVal("deg",deci[0] );
+
+		//
+		deci[1] = "0."+ deci[1];
+		var min_sec = deci[1] * 3600;
+		var min = Math.floor( min_sec / 60 );
+		var sec =  ( min_sec - ( min * 60 ) ) ;
+		
+		setVal("min",min);
+		
+		setVal("sec",sec);
+		 
+	}
+function hide(m){
+document.getElementById(m).style.display="none";
+return true;
+}
+function show(m){
+document.getElementById(m).style.display= "";
+return true;
+}
+//private const double EARTH_RADIUS = 6378.137;
+function rad(d)
+{
+return d * Math.PI / 180.0;
+}
+
+function GetDistance( lat1,  lng1,  lat2,  lng2)
+{hide("warning");
+if( ( Math.abs( lat1 ) > 90  ) ||(  Math.abs( lat2 ) > 90 ) ){
+	document.getElementById("warning").innerHTML = ("兄台，这哪里是纬度啊？分明是想忽悠我嘛");
+	show("warning");
+	return "耍我？拒绝计算！";
+}else{
+	hide("warning");
+}
+if( ( Math.abs( lng1 ) > 180  ) ||(  Math.abs( lng2 ) > 180 ) ){
+
+	show("warning");
+	document.getElementById("warning").innerHTML = ("兄台，这哪里是经度啊？分明是想忽悠我嘛");
+	return "耍我？拒绝计算！";
+}else{
+	hide("warning");
+}
+var radLat1 = rad(lat1);
+var radLat2 = rad(lat2);
+var a = radLat1 - radLat2;
+var  b = rad(lng1) - rad(lng2);
+var s = 2 * Math.asin(Math.sqrt(Math.pow(Math.sin(a/2),2) +
+Math.cos(radLat1)*Math.cos(radLat2)*Math.pow(Math.sin(b/2),2)));
+s = s *6378.137 ;// EARTH_RADIUS;
+s = Math.round(s * 10000) / 10000;
+return s;
+}
+function calDis(){
+	var lat1 = document.getElementById( "lat1").value * 1;
+	var lat2 = document.getElementById( "lat2").value * 1;
+	var lng1 = document.getElementById( "lng1").value * 1;
+	var lng2 = document.getElementById( "lng2").value * 1;
+	var dis =  GetDistance(lat1, lng1, lat2, lng2);
+	document.getElementById( "distance").value = dis;
+
+}
+  //-->
+  </SCRIPT>
+
+  <div style="text-align:Center"> This Tool is Powered by Cosbeta [china.cos(at)gmail.com]</div>
+  </div>  </div>
+ </body>
+ <!-- 广州京信数字微波 江东 2008年 -->
+</html>
