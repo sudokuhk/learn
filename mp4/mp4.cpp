@@ -158,8 +158,8 @@ union nbytes_t {
 struct boxhead_t {
 private:
     union {
-        nbytes_t<long> l_val;
-        nbytes_t<int> i_val;
+        nbytes_t<uint64_t> l_val;
+        nbytes_t<uint32_t> i_val;
     } _size;
     nbytes_t<int> _type;;
     bool _ok;
@@ -189,6 +189,7 @@ public:
         if (nread != _type.nbytes()) {
             return nread;
         }
+        //printf("size:%u\n", _size.i_val.little_endian_val());
         if (_size.i_val.little_endian_val() == 1) { //read large size
             _large_size = true;
             nread = _size.l_val.read(fd);  
@@ -200,7 +201,7 @@ public:
         return head_bytes();
     }
     
-    long size(void) const {
+    uint64_t size(void) const {
         if (_large_size) {
             return _size.l_val.little_endian_val();
         } else {
@@ -664,10 +665,16 @@ struct dref_box_t
         boxhead_t head;
         for (int i = 0; i < entry_count.little_endian_val(); i++) {
             head.read(fd);
+            printf("def:type:%s\n", head.type());
             if (strncmp(head.type(), "url ", 4) == 0) {
                 entry.url[i].read(fd, head.size() - head.head_bytes());
             } else {
-                //print(level + 1, "urn");
+                uint64_t data_bytes = head.size() - head.head_bytes();
+                if (data_bytes > 0) {
+                    off_t cur_off = lseek(fd, data_bytes, SEEK_CUR); //get current offset
+                } else {
+                    //print(level, "empty box\n");
+                }
             }
         }
         
@@ -987,7 +994,8 @@ struct esds_box_t
     }
     
     void show(int level) {
-        print(level, "codec:%s\n", decoder_config_desc.is_aac() ? "AAC" : "Other");
+        print(level, "codec:%u:%s\n", decoder_config_desc.object_type,
+              decoder_config_desc.is_aac() ? "AAC" : "Other");
     }
 };
 
@@ -1383,17 +1391,18 @@ int mp4_read_box_free(int fd, boxhead_t & hdr, int level)
 
 int mp4_read_box_noop(int fd, boxhead_t & head, int level) 
 {
-    print(level, "read box:%s, size:%08lx, headsize:%d\n",
-           head.type(), head.size(), head.head_bytes());
+    uint64_t boxsize = head.size();
+    print(level, "read box:%s, size:%llu, headsize:%d\n",
+           head.type(), boxsize, (uint64_t)head.head_bytes());
     
-    int data_bytes = head.size() - head.head_bytes();
+    uint64_t data_bytes = head.size() - head.head_bytes();
     if (data_bytes > 0) {
         off_t cur_off = lseek(fd, data_bytes, SEEK_CUR); //get current offset
     } else {
         print(level, "empty box\n");
     }
     
-    return data_bytes;
+    return 1;
 }
 
 int mp4_read_box_mvhd(int fd, boxhead_t & mvhd_hdr, int level) 
@@ -1595,7 +1604,7 @@ int mp4_read_box_stbl(int fd, boxhead_t & hdr, int level)
     while (true) {
         head.clear();
         if (head.read(fd) == 0) {
-            print(level + 1, "mp4_read_box_mdia, read end of file\n");
+            print(level + 1, "mp4_read_box_stbl, read end of file\n");
             return -1;
         }
         
@@ -1644,7 +1653,7 @@ int mp4_read_box_minf(int fd, boxhead_t & hdr, int level)
     while (true) {
         head.clear();
         if (head.read(fd) == 0) {
-            print(level + 1, "mp4_read_box_mdia, read end of file\n");
+            print(level + 1, "mp4_read_box_minf, read end of file\n");
             return -1;
         }
         
