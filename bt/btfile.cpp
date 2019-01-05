@@ -141,6 +141,7 @@ static int parse_dictionary(char * dat, int size)
     int n = 1, n1 = 0;
     SKIP(dat, size, 1);    //skip 'd'
 
+    printf("parse_dictionary\n");
 loop:
     n1 = parse_string(dat, size);
     if (n1 < 0) {
@@ -184,6 +185,7 @@ static int parse_integer(char * dat, int size)
 
 static int parse_list(char * dat, int size)
 {
+    printf("parse_list\n");
     char * b_dat = dat;
     int n = 1;
 loop:
